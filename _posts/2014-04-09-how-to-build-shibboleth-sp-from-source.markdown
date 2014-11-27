@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Build Shibboleth SP from source"
-date:   2014-04-26 10:07:11
+date:   2014-04-09 10:07:11
 categories: shibboleth saml
 ---
 
