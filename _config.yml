@@ -1,0 +1,12 @@
+# Site settings
+title: "Joost's personal github page"
+email: vandijk.joost@gmail.com
+description: > # this means to ignore newlines until "baseurl:"
+  personal description for my site
+baseurl: "" # the subpath of your site, e.g. /blog/
+url: "http://joostd.github.io"
+twitter_username: joostd
+github_username:  joostd
+
+# Build settings
+markdown: kramdown
