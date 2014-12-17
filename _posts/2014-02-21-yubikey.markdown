@@ -1,0 +1,321 @@
+Yubico OTPs 
+-----------
+
+The Yubico OTP algorithm generates one-time passwords by essentially
+encrypting a counter and an identifier with a secret key, stored
+on the YubiKey and shared with the validation server. The authentication
+server validates an OTP by decrypting it and subsequently checking
+if the counter value is strictly greater than the value of the
+counter used in the previous OTP generated. The validation server
+maintains a database in which for each YubiKey its secret is stored,
+together with the counter and a private identifier. The private
+identifier is used to check whether the correct secret was used
+when decrypting the OTP.
+
+YubiKeys can be configured to use different OTP algorithms. When
+ordered via the Yubico webshop, YubiKeys are preconfigured with the
+Yubico OTP algorithm, using a secret that is shared between the
+YubiKey and the key stores of Yubico’s validation service: YubiCloud.
+
+The default setup of the Yubico OTP generates 44-character OTPs,
+for instance: `ccccccbtulitunffiughhudgnceedecdngccjegfgebn`.
+
+These OTPs consist of a static and a dynamic part. The static part
+is used to identity the YubiKey device and is called the public
+device identifier. When preconfigured by Yubico, the public device
+identifier is equal to the device serial number. For example, the
+OTP example given is generated with a YubiKey with serial (device
+ID) 01906353, and the first 12 characters represent the static part
+and are an encoding of the serial number using modhex encoding.
+
+Using standard UNIX-like commands, extracting the public device ID
+can be expressed as:
+
+```
+$ echo ccccccbtulitunffiughhudgnceedecdngccjegfgebn | cut -c 1-12
+ccccccbtulit
+```
+
+Modhex encoding
+---------------
+
+Modhex encoding is a modified version of hexadecimal (base 16)
+encoding, where the standard alphabet for hexadecimal digits (numbers
+0-9 and letters a-f) is replaced with characters that are unaffected
+by the language settings for international keyboards (where the
+keyboard’s scan code for a standard hex character may be interpreted
+differently). Instead, the more neutral characters from the alphabet
+cbdefghijklnrtuv are used.
+
+The modhex encoding and decoding can be performed using the `tr` command:
+
+```
+$ echo ccccccbtulit | tr cbdefghijklnrtuv 0123456789abcdef
+0000001dea7d
+```
+
+Converting this hexadecimal encoding into decimal using the printf
+command, we arrive at the device serial number:
+
+```
+$ printf "%08d\n" 0x0000001dea7d
+01960573
+```
+
+For brevity, we will use the following aliases for modhex encoding
+and decoding:
+
+```
+alias decode='tr cbdefghijklnrtuv 0123456789abcdef'
+alias encode='tr 0123456789abcdef cbdefghijklnrtuv'
+```
+
+Yubicloud
+---------
+
+YubiCloud is Yubico’s validation service that can be used instantly
+with YubiKeys ordered through Yubico’s web shop. Yubico host several
+(currently 5) validation servers throughout the world. The validation
+service has a simple REST interface that can be queried using
+standard software or using client libraries available in different
+programming languages. API calls require several parameters,
+documented at (YubiKey validation protocol n.d.).
+
+Apart from the otp parameter for the OTP to verify, a nonce parameter
+is required to detect duplicate requests, and an id is required to
+identity the client. The default client identifier 1 is available
+for testing, but in production it is recommended to apply for a
+unique client ID so that it becomes possible to verify the service
+response without relying on the server certificate used in HTTPS.
+
+Using a command-line HTTP client like curl as an example, one can
+validate a Yubico OTP as follows:
+
+```
+$ curl https://api.yubico.com/wsapi/2.0/verify \
+> --data id=1 \
+> --data nonce=ec1402012344da54316bc57021a3b2b9fdefff11 \
+> --data otp=ccccccbcrbkkdtbherffnrufgfjcidkkugbndkchjunj
+h=EfnWL+zdu3Wjx276CzCb+TopGHg=
+t=2014-01-03T12:37:08Z0225
+otp=ccccccbcrbkkdtbherufnrufgfjcidkkugfndkchjunj
+nonce=ec1402012344da54316bc57021a3b2b9fdefff11
+sl=25
+status=OK
+```
+
+The parameters returned include the status field, indicating whether
+or not the OTP was valid. The hash field (h) can be used to verify
+the response when using a private API key.
+
+If the same request is sent a second time, the service will detect
+a replay:
+
+```
+$ curl https://api.yubico.com/wsapi/2.0/verify \
+> --data id=1 \
+> --data nonce=ec1402012344da54316bc57021a3b2b9fdefff11 \
+> --data otp=ccccccbcrbkkdtbherffnrufgfjcidkkugbndkchjunj
+h=Z3/Q5pb3RenfMRteO0mHLem5xkY=
+t=2014-01-03T12:45:10Z0530
+otp=ccccccbcrbkkdtbherufnrufgfjcidkkugfndkchjunj
+nonce=ec1402012344da54316bc57021a3b2b9fdefff11
+status=REPLAYED_REQUEST
+```
+
+Using a different nonce with the same OTP is flagged as an OTP
+replay:
+
+```
+$ curl https://api.yubico.com/wsapi/2.0/verify \
+> --data id=1 \
+> --data nonce=ec1402012344da54316bc57021a3b2b9fdefff22 \
+> --data otp=ccccccbcrbkkdtbherffnrufgfjcidkkugbndkchjunj
+h=cBW6lgaf8NwjBvLPA1JDVcmseHY=
+t=2014-01-03T12:45:10Z0530
+otp=ccccccbcrbkkdtbherufnrufgfjcidkkugfndkchjunj
+nonce=ec1402012344da54316bc57021a3b2b9fdefff11
+status=REPLAYED_OTP
+```
+
+Personalization
+---------------
+
+Yubico offers tools to personalise YubiKeys, available for Windows,
+Linux, and Mac OS X systems. YubiKeys can be reprogrammed using
+these tools, for instance for use with a private validation service,
+or to enable the second slot of a YubiKey with a different OTP
+algorithm.
+
+![Yubikey Personalisation Tool]({{ site.url }}/assets/yubikey-personalisation-tool.png)
+
+Naturally, the new secret is now unknown to the YubiCloud service
+after reprogramming:
+
+```
+$ curl https://api.yubico.com/wsapi/2.0/verify \
+> --data id=1 \
+> --data nonce=ec1402012344da54316bc57021a3b2b9fdefff11 \
+> --data otp=vvfvdlgjijtnfctjubkcguibcntrerrhlfllhljdbtud'
+h=gJy/EXVkgEIXV4ZHKKqhHHcvyDM=
+t=2014-01-03T12:45:24Z0143
+otp=ccccccbcrbkkdtbherufnrufgfjcidkkugfndkchjunj
+nonce=ec1402012344da54316bc57021a3b2b9fdefff11
+status=BAD_OTP
+```
+
+The new key can however be uploaded to the YubiCloud servers, using
+a web interface:
+
+![Yubico AES Key Upload]({{ site.url }}/assets/yubico-aes-key-upload.png)
+
+Note that an existing key ID cannot be overwritten, and slots are
+available on a first-come, first serve basis. To distinguish
+pre-programmed YubiKeys from reprogrammed YubiKeys, a different
+prefix (vv, representing ff in standard hex notation) is used.
+
+Note that several parameters are required when uploading keys. Apart
+from the AES key, the YubiKey prefix is required to associate the
+AES key with the YubiKey token, and an internal identity is used
+as a secret that is needed to verify OTPs generated with this YubiKey
+(see next section).
+
+Yubico OTP algorithm
+--------------------
+
+The YubiKey OTP algorithm uses AES encryption based on a shared AES
+key, stored on both the YubiKey and the validation server, preferably
+in an HSM. To identify the YubiKey, in order to determine the correct
+AES key, the public device ID is typically used. The validation
+server thus maintains a database mapping public IDs to AES keys.
+
+The Yubico OTP algorithm is event-based in order to generate a
+different OTP every time the button is pressed. A new OTP will be
+generated based on an internal counter that is synchronized with
+the validation server. When verifying an OTP, the validation server
+makes sure that the counter used on the YubiKey is strictly greater
+than the value in the previous OTP that was validated. The counter
+state is stored together with the key in the validation database.
+
+When validating an OTP, the YubiKey validation server must ensure
+that the OTP was generated with the same secret that it has registered
+for the public id of the YubiKey in question. Because the AES
+encryption algorithm is used in ECB mode, without any padding, the
+plaintext OTP contains a secret identifier that is also stored both
+on the YubiKey and in the validation database. This 48-bit value
+must match for an OTP to be valid, effectively mitigating spoofing
+attacks against YubiKey tokens.
+
+As an example, suppose we have a YubiKey with a public id value of
+`vvfvdlgjijtn` (modhex encoded) and a private id value of `16ed9aafaf04`
+(hexadecimal). The AES key used is `a007764fa0d15d8a6fcfcbf3c9fd9b94`
+(hexadecimal).
+
+Consider a sample 44-character OTP value of
+`vvfvdlgjijtnnftbugrthudrvgghejiivlchhnkcfnlj`. The first 12
+characters comprise the static part of the OTP and contain (an
+encoding of) the public id of the token:
+
+```
+$ echo vvfvdlgjijtnnftbugrthudrvgghejiivlchhnkcfnlj | cut -c1-12
+vvfvdlgjijtn
+```
+
+[The cut command is used to select specific characters from input
+data]. The rest of the characters form the dynamic part of the OTP:
+
+```
+$ echo vvfvdlgjijtnnftbugrthudrvgghejiivlchhnkcfnlj | cut -c13-44
+nftbugrthudrvgghejiivlchhnkcfnlj
+```
+
+We introduce the strip alias for stripping of the static part:
+
+```
+alias strip='cut -c 13-44'
+```
+
+If we modhex-decode this value, we arrive at the 128-bit AES encrypted
+data:
+
+```
+$ echo vvfvdlgjijtnnftbugrthudrvgghejiivlchhnkcfnlj | strip | decode
+b4d1e5cd6e2cf5563877fa066b904ba8
+```
+
+We can decrypt this data using the openssl toolkit. For this purpose
+we introduce the following alias:
+
+```
+alias decrypt='openssl enc -d -aes-128-ecb -nopad -K a007764fa0d15d8a6fcfcbf3c9fd9b94'
+```
+
+As the decryption process input and output will be binary, we use
+two other aliases to encode and decode binary data into hexadecimal
+notation and vice versa:
+
+```
+alias hex='xxd -p'
+alias unhex='xxd -r -p'
+```
+
+Combining aliases, we can illustrate the plaintext values that were
+used in the OTP generating algorithm (coloring added to increase
+readability):
+
+```
+$ echo vvfvdlgjijtnnftbugrthudrvgghejiivlchhnkcfnlj | strip | \
+> decode | unhex | decrypt | hex
+16ed9aafaf040100b8e9860ec23d9e61
+```
+
+Note that the first 6 bytes match the private id value `16ed9aafaf04`.
+
+The complete 16 bytes encrypted to form an OTP are listed in the
+following table:
+
+field | length | example | purpose
+------|--------|---------|---------
+private ID | 6 bytes | 16 ed 9a af af 04 | detect correct decryption
+counter | 2 bytes | 0x0001 (1) | detect replay (nonvolatile)
+timestamp (low) | 2 bytes | 0xe9b8 | add entropy, anti-phishing (volatile)
+timestamp (high) | 1 byte | 0x86 | add entropy, anti-phishing (volatile)
+session use | 1 byte | 0x0e (14) | detect replay (volatile)
+random | 2 bytes | 0x3dc2 | add entropy
+CRC | 2 bytes | 0x619e | validate data integrity
+
+The counter and session use fields are used for replay detection.
+The counter bytes are stored in nonvolatile memory and are incremented
+when the YubiKey is connected to a power source. The session use
+field is initialized to zero on power up and incremented at each
+button press. This means YubiKeys can have at most 65,536 sessions.
+
+When another OTP is generated, we arrive at:
+
+```
+$ echo vvfvdlgjijtnddkueivtdcdrhncvcuecnuddvefitgef | strip | decode | unhex | decrypt | hex
+16ed9aafaf040100bfee860f215c31a6
+```
+
+Note that this OTP decrypts into plaintext with the same private
+ID value, a counter increment of 1 (i.e. it is the very next OTP
+generated).
+
+The timestamp values are used to detect delays between the generation
+and use of OTP values. Timestamps are initialized to a random value
+on power-up, and increment based on an 8 Hz internal clock. In the
+two previous examples, note that there is a timestamp increase of
+0x86eebf - 0x86e9b8 = 0x507 or 1287, corresponding with roughly 160
+seconds. This means that the second OTP was generated 160 seconds
+after the first. The purpose of this delay-detection mechanism is
+to prevent certain attacks where OTP values are sniffed and used
+later on, like in a phishing scenario. To use this mechanism,
+multiple OTP values must be available to the mitigating system, in
+order to determine the time difference.
+
+```
+$ echo vvfvdlgjijtniljnbfnteehfcbnljjuvdcinfrrtkubk | strip | \
+> decode | unhex | decrypt | hex
+16ed9aafaf040100b7198710f43e6d9a
+```
+
