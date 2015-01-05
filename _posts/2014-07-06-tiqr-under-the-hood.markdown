@@ -1,5 +1,7 @@
 # How does tiqr work under the hood?
 
+[tiqr](https://tiqr.org) is a challenge-response authentication app for mobile phones. It allows users to securely log onto websites (for instance) without retyping any codes. It is both user-friendly *and* secure. But how does it work?
+
 tiqr uses the OATH Challenge-Response Algorithm (OCRA) as defined in 
 [RFC 6287](http://tools.ietf.org/html/rfc6287)
 
@@ -10,7 +12,7 @@ The resulting MAC function takes a secret key and a message as parameters, and r
 The idea is that without knowing the secret key, it is impossible to predict what the output will be for a given message.
 
 OCRA is part of a family of algorithms for generating One Time Passwords (OTPs):
-the other two are called HOTP (defined in RFC4226), and TOTP (defined in RFC6238).
+the other two are called HOTP (defined in [RFC 4226](http://tools.ietf.org/html/rfc4226)), and TOTP (defined in [RFC 6238](http://tools.ietf.org/html/rfc6238)).
 All three are based on HMAC codes, but differ in the what messages they use as input to the HMAC function.
 For HOTP, the message is simply a counter, TOTP uses a timestamp (e.g. the current time in milliseconds since 1970, modulo 30 seconds), while OCRA uses a random nonce.
 Computing an OTP from a nonce and a secret key can be seen as computing a response from a (random) challenge, OCRA is called a Challenge/Response algorithm.
@@ -27,7 +29,7 @@ This string decomposes into three parts, separated by a colon.
 The first (OCRA-1 in this example) specifies the version of the OCRA algorithm.
 The current version is 1, but maybe a new version will emerge in the future.
 The second part (here, HOTP-SHA1-6) specifies the cryptographic function used when computing the response.
-In the example, the basic HOTP algorithm is used (except that we won't be using a counter here), with SHA-1 as the hash function and truncating the response to 6 digits (again, using the truncation algorithm defined in RFC4226).
+In the example, the basic HOTP algorithm is used (except that we won't be using a counter here), with SHA-1 as the hash function and truncating the response to 6 digits (again, using the truncation algorithm defined in [RFC 4226](http://tools.ietf.org/html/rfc4226)).
 The final part specifies what the challenge looks like.
 QN08 means that the challenge ("question") is numeric (i.e. contains only decimal digits) and has a length of 8 characters.
 The OCRA standard defines many more complicated suites, supporting mutual authentication and signatures and incorporating timestamps and counters - but as these features are not used in tiqr, I won't dive into them here.
@@ -69,7 +71,7 @@ For the demo tiqr application, there is a simple enrolment page, one that isn't 
 It is a pure self-service enrolment interface.
 However, it is perfect for explaining how enrolment is performed, *technically*.
 
-So, let's browse to (https://demo.tiqr.org/) and browse to the online banking pages to log in.
+So, let's browse to [https://demo.tiqr.org/](https://demo.tiqr.org/) and browse to the online banking pages to log in.
 An authentication page will appear, but as we are not enrolled yet,  we click the "Not yet enrolled" link to set up a new account.
 
 We enter a user name (e.g. johnny) and our full name (John Appleseed) and click "go".
@@ -77,7 +79,7 @@ What appears now is a QR tag that we need to scan using the tiqr app.
 
 ![tiqr enrolment QR code][enrol]
 
-[enrol]: http://chart.apis.google.com/chart?cht=qr&chs=300x300&chl=tiqrenroll%3A//https%3A//demo.tiqr.org/simplesaml/module.php/authTiqr/metadata.php%3Fkey%3D9902b90015149db00b5eaf3abdc50562%0D%0A&chld=H|0 "tiqr enrolment QR code"
+[enrol]: http://chart.apis.google.com/chart?cht=qr&chs=300x300&chl=tiqrenroll%3A//https%3A//demo.tiqr.org/simplesaml/module.php/authTiqr/metadata.php%3Fkey%3D9902b90015149db00b5eaf3abdc50562%0D%0A "tiqr enrolment QR code"
 
 
 The QR code is used to easily transfer information to our phone.
@@ -111,7 +113,7 @@ The next step is where we exchange a secret.
 The tiqr application generated a random secret and shares it with the server.
 If is important that the secret is not shared with anyone else, so HTTPS is always used in enrolment URLs.
 
-Let's say we generate the 256-bit secret 0x3132333435363738393031323334353637383930313233343536373839303132 (which doesn't look very random of course, but I think I can get away with it in an example).
+Let's say we generate the 256-bit secret `0x3132333435363738393031323334353637383930313233343536373839303132` (which doesn't look very random of course, but that happens with examples).
 The tiqr app will POST the secret to the enrolment URL first:
 
 	curl --data secret=3132333435363738393031323334353637383930313233343536373839303132 https://demo.tiqr.org/simplesaml/module.php/authTiqr/enroll.php?key=daffc0647da2d5d42449f8f4241542cf
@@ -122,19 +124,18 @@ Now let's move on to authenticate.
 
 ## Authentication
 
-So, let's again browse to (https://demo.tiqr.org/) and navigate to the online banking pages to log in.
+So, let's again browse to [https://demo.tiqr.org/](https://demo.tiqr.org/) and navigate to the online banking pages to log in.
 An authentication page will appear, and this time we are already enrolled,  so we use our tiqr client to scan the QR code
 
 ![tiqr authentication QR code][tiqrauth]
 
-[tiqrauth]: http://chart.apis.google.com/chart?cht=qr&chs=300x300&chl=tiqrauth%3A//demo.tiqr.org/f2fadeb54690d0d71924236f87e090bb/8ab9d15047/demo.tiqr.org&chld=H|0 "tiqr authentication QR code"
-http://chart.apis.google.com/chart?cht=qr&chs=300x300&chl=tiqrauth%3A//demo.tiqr.org/f2fadeb54690d0d71924236f87e090bb/8ab9d15047/demo.tiqr.org&chld=H|0
+[tiqrauth]: http://chart.apis.google.com/chart?cht=qr&chs=300x300&chl=tiqrauth%3A//demo.tiqr.org/f2fadeb54690d0d71924236f87e090bb/8ab9d15047/demo.tiqr.org "tiqr authentication QR code"
 
 This QR code decodes as:
 
 	tiqrauth://demo.tiqr.org/f2fadeb54690d0d71924236f87e090bb/8ab9d15047/demo.tiqr.org
 
-Embedded in this code are a challenge question (8ab9d15047) and a session key (f2fadeb54690d0d71924236f87e090bb)
+Embedded in this code are a challenge question (`8ab9d15047`) and a session key (`f2fadeb54690d0d71924236f87e090bb`)
 
 If we use the OCRA algorithm to compute the response using the default OCRASuite of `OCRA-1:HOTP-SHA1-6:QH10-S` and above challenge question and session we arrive at the response: 880407.
 
